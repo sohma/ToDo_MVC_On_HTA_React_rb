@@ -1,0 +1,384 @@
+﻿<!DOCTYPE html>
+<html>
+  <head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+    <!-- 共通ヘッダー -->
+    <!-- IE9/10 で Canvas を使用する場合 -->
+    <!-- <meta http-equiv="X-UA-Compatible" content="IE=edge"> -->
+    <!-- IE11 以上で Canvas を使用する場合 -->
+    <!-- <meta http-equiv="X-UA-Compatible" content="IE=9"> -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="css/base.css" rel="stylesheet">
+    <!-- [if lt IE 9]>
+        <script src="js/htmlSshiv.js"></script>
+        <script src="js/respond.min.js"></script>
+    <![endif]-->
+    <hta:application id="ToDoMVC" 
+            navigable = "yes"
+            applicationname="test"
+            border="thick"
+            caption="yes"
+            showintaskbar="yes"
+            singleinstance="yes"
+            sysmenu="yes"
+            windowstate="normal"/>
+    <!-- 共通ヘッダー ここまで -->
+    <meta charset="utf-8">
+
+  </head>
+<!-- メイン -->
+<body>
+
+    <div id="todoapp"></div>
+
+    <!-- Script -->
+    <script src="js/jquery-2.1.4.min.js"></script>
+    <script src="js_react/inline-reactive-ruby.js"></script>
+    <script src="js/json.js"></script>
+    <script src="js/singleton.js"></script>
+  	<script src="js/native.js"></script>
+    <script src="js/template.js"></script>
+
+    <script src="js_vienna/base.js"></script>
+    <script src="js_vienna/eventable.js"></script>
+    <script src="js_vienna/history_router.js"></script>
+    <!-- <script src="js_vienna/local.js"></script>-->
+    <script src="js_vienna/model.js"></script>
+    <script src="js_vienna/observable.js"></script>
+    <script src="js_vienna/observable_array.js"></script>
+    <script src="js_vienna/output_buffer.js"></script>
+    <script src="js_vienna/record_array.js"></script>
+    <script src="js_vienna/view.js"></script>
+    <script src="js_vienna/template_view.js"></script>
+    <script src="js_vienna/rest.js"></script>
+    <script src="js_vienna/router.js"></script>
+    <script src="js_vienna/vienna.js"></script>
+
+    <script src="js_mylib/filewsh.js"></script>
+
+    <script src="js_mylib/resize.js"></script>
+    <script language="JavaScript">
+        changeWindow(700, 800);
+        $('input[id=fileInput]').change(function(){
+               $("#photo-dummy").text($(this).val());
+               
+        });
+    </script>
+    
+<script type="text/ruby">
+class InFileStorage
+  #include Singleton # Don't work. It  err.
+  
+  def setItem(klass_name, json)
+    FileWsh.open("todo.txt", "w") do |ff|
+      ff.write(json)
+    end
+  end
+
+  def getItem(klass_name)
+    FileWsh.open("todo.txt", "r").read
+  end
+
+end
+</script>
+
+<script type="text/ruby">
+module Vienna
+  # Adapter using File as a backend
+  class FileAdapter < Adapter
+    def initialize
+      @storage = InFileStorage.new
+    end
+
+    def create_record(record, &block)
+      record.id = self.unique_id
+      record.did_create
+      sync_models(record.class)
+
+      block.call(record) if block
+    end
+
+    def update_record(record, &block)
+      record.did_update
+      sync_models(record.class)
+
+      block.call(record) if block
+    end
+
+    def delete_record(record, &block)
+      record.did_destroy
+      sync_models record.class
+      block.call(record) if block
+    end
+
+    def find_all(klass, &block)
+      if data = @storage.getItem(klass.name)
+        #alert("find_all(data):#{data}")
+        j_parse = JSON.parse(data)
+        #alert("find_all(j_parse):#{data}")
+        models = j_parse.map{ |m| klass.load(m) }
+        #alert("find_all:#{models}")
+        #models = data
+        block.call(models) if block
+      end
+    end
+
+    # sync all records in given class to localstorage, now!
+    def sync_models(klass)
+      name = klass.name
+      ms = klass.all.map.to_json
+      #alert("sync_models:#{ms}")
+
+      @storage.setItem name, ms
+    end
+
+    # generate a new unique id.. just use timestamp for now
+    def unique_id
+      (Time.now.to_f * 1000).to_s
+    end
+  end
+end
+
+# modoles/todo.rb
+class Todo < Vienna::Model
+  adapter Vienna::FileAdapter
+
+  attributes :title, :completed
+
+  alias completed? completed
+
+  # All active (not completed) todos
+  def self.active
+    all.reject(&:completed)
+  end
+
+  # All completed todos
+  def self.completed
+    all.select(&:completed)
+  end
+end
+
+
+# components/todo_item.react.rb
+class TodoItem
+  include React::Component
+  KEY_ENTER = 13
+        
+  params do
+    requires :todo, type: Todo
+    requires :complete_check
+  end
+
+  define_state(:editing) { false }
+  define_state(:edit_text)
+
+  before_mount :set_up
+
+  def set_up
+    #self.edit_text = params[:todo].title
+    state.edit_text! params[:todo].title
+  end
+
+  def finish_editing
+    #self.editing = false
+    state.editing! false
+    #new_value = self.edit_text.strip
+    new_value = state.edit_text.strip
+    if new_value.empty?
+      params[:todo].destroy
+    else
+      params[:todo].update(title: new_value)
+    end
+  end
+
+  def render
+    #li(class_name: {editing: self.editing}) do
+    li(class_name: {editing: state.editing}) do
+      div(class_name: 'view') do
+        #alert("TodoItem Update before : #{params[:todo].completed}")
+        input(class_name: "toggle", type: "checkbox", checked: params[:todo].completed).on(:click) do
+          #alert("TodoItem Update after pre-update: #{params[:todo].completed}")
+          todo = params[:todo]
+          todo.update(:completed => !todo.completed)
+          #alert("TodoItem Update after updated : #{params[:todo].completed}")
+        end
+        
+        #label { self.edit_text }.on(:double_click) do
+        label { state.edit_text }.on(:double_click) do
+          # set on state will trigger re-render, so we manipulate the DOM after render done
+          #self.set_state(editing: true) do
+            #self.refs[:input].dom_node.focus
+          #end
+          state.editing! true
+          #self.edit_text! params[:todo].title
+          state.edit_text! params[:todo].title
+        end if ! state.editing
+
+        button(class_name: "destroy").on(:click) { params[:todo].destroy }
+      end
+      #input(class_name: "edit", value: self.edit_text, autoFocus: true, ref: :input)
+      input(class_name: "edit", value: state.edit_text, autoFocus: true, ref: :input)
+      .on(:blur) { finish_editing }
+      .on(:change) {|e| state.edit_text! e.target.value }
+      .on(:key_down) { |e| finish_editing if (e.key_code == KEY_ENTER) } if state.editing
+    end
+  end
+end
+
+
+# components/todo_list.react.rb
+class TodoList
+  include React::Component
+
+  param :todos, type: [Todo]
+  
+  def toggle_all
+    distinct_status = Todo.all.map {|t| t.completed }.uniq
+    #alert("toggle_all:#{distinct_status}") 
+    if distinct_status.count == 1
+      Todo.all.each {|t| t.update(:completed => !distinct_status[0]) }
+    else # toggle all as completed
+      Todo.all.each {|t| t.update(:completed => true) }
+    end
+  end
+  
+  def render
+    section(id: "main") do
+      input(id: "toggle-all", type: "checkbox").on(:click) { toggle_all }
+      label(htmlFor: "toggle-all") { "Mark all as complete" }
+      ul(id: "todo-list") do
+        #alert("Todo-List:#{todos}")
+        params[:todos].map do |todo|
+          #alert("TodoList ul : #{todo.completed}")
+          #present TodoItem, todo: todo , key: todo.id
+          present TodoItem, todo: todo , key: todo.id, complete_check: todo.completed
+          #present TodoItem, todo: todo , key: todo.id
+        end
+      end
+    end
+  end
+end
+
+
+# componets/app.react.rb
+class TodoAppView
+  include React::Component
+
+  KEY_ENTER = 13
+
+  params do
+    requires :filter, values: ["all", "active", "completed"]
+  end
+
+  define_state(:todos) { [] }
+
+  before_mount do
+    Todo.on(:create)  { Todo.adapter.sync_models(Todo); reload_current_filter }
+    Todo.on(:update)  { Todo.adapter.sync_models(Todo); reload_current_filter } #alert "TodoAppView Update : #{Todo.all.map{|e| e.completed}}";
+    Todo.on(:destroy) { Todo.adapter.sync_models(Todo); reload_current_filter }
+  end
+
+  before_receive_props do |next_props|
+    apply_filter next_props[:filter]
+  end
+
+  def reload_current_filter
+    apply_filter(params[:filter])
+  end
+
+  def apply_filter(filter)
+    Todo.adapter.find_all(Todo) do |models|
+      case filter
+      when "all"
+        #self.todos = models.map{|e| e}
+        state.todos!  models.map{|e| e}
+      when "active"
+        #self.todos = models.reject(&:completed)
+        state.todos!  models.reject(&:completed)
+      when "completed"
+        #self.todos = models.select(&:completed)
+        state.todos!  models.select(&:completed)
+      end
+    end
+  end
+
+  def handle_keydown(event)
+    if event.key_code == KEY_ENTER
+      value = event.target.value.strip
+      Todo.create title: value, completed: false
+      event.target.value = ""
+    end
+  end
+
+  def render
+    div do
+      header(id: "header") do
+        h1 { "Todos" }
+        input(id: "new-todo", placeholder: "What needs to be done?").on(:key_down) { |e| handle_keydown(e) }
+      end
+      #present TodoList, todos: self.todos
+      present TodoList, todos: state.todos
+      #alert("TodoAppView render : #{self.todos.map{|e| e.completed}}")
+      present Footer, selected_filter: params[:filter]
+    end
+  end
+end
+
+
+# components/footer.react.rb
+class Footer
+  include React::Component
+
+  param :selected_filter, type: String
+
+  def clear_completed
+    Todo.completed.each { |t| t.destroy }
+  end
+
+  def render
+    footer(id: "footer") do
+      span(id: "todo-count") do
+        strong { Todo.active.size }
+        span { Todo.active.size == 1 ? ' item left' : ' items left' }
+      end
+
+      ul(id: "filters") do
+        filters = [{href: "#/", filter: "all"},
+                   {href: "#/active", filter: "active"},
+                   {href: "#/completed", filter: "completed"}]
+        filters.map do |item|
+          li { a(href: item[:href], class_name: {selected: params[:selected_filter] == item[:filter]}) { item[:filter].capitalize } }
+        end
+      end
+
+      completed = Todo.completed.size
+
+      if completed > 0
+        button(id: "clear-completed") { "Clear completed (#{completed})" }.on(:click) { clear_completed }
+      end
+    end
+  end
+end
+
+
+# application.rb 
+Document.ready? do
+  element = React.create_element(TodoAppView, filter: "all")
+  component = React.render(element, Element.find('#todoapp').get(0))
+
+  Vienna::Router.new.tap do |router|
+    router.route('/:filter') do |params|
+      component.set_props(filter: params[:filter].empty? ? "all" : params[:filter])
+    end
+  end.update
+
+end
+</script>
+
+</body>
+
+ 
+<!-- メイン ここまで -->
+</html>
