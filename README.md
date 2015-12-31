@@ -18,8 +18,8 @@ Double click todo.hta
 
 We use the following open sources.
 
-* Opal          : https://github.com/zetachang/react.rb
-* React.rb      : https://github.com/reactive-ruby/inline-reactive-ruby
+* Opal          : https://github.com/opal/opal 
+* React.rb      : https://github.com/zetachang/react.rb 
 * inline-reactive-ruby : https://github.com/reactive-ruby/inline-reactive-ruby
 * Vienna        : https://github.com/opal/vienna
 * FileWsh-Opal  : https://github.com/sohma/FileWsh-Opal
