@@ -115,12 +115,8 @@ module Vienna
 
     def find_all(klass, &block)
       if data = @storage.getItem(klass.name)
-        #alert("find_all(data):#{data}")
         j_parse = JSON.parse(data)
-        #alert("find_all(j_parse):#{data}")
         models = j_parse.map{ |m| klass.load(m) }
-        #alert("find_all:#{models}")
-        #models = data
         block.call(models) if block
       end
     end
@@ -129,7 +125,6 @@ module Vienna
     def sync_models(klass)
       name = klass.name
       ms = klass.all.map.to_json
-      #alert("sync_models:#{ms}")
 
       @storage.setItem name, ms
     end
@@ -177,14 +172,11 @@ class TodoItem
   before_mount :set_up
 
   def set_up
-    #self.edit_text = params[:todo].title
     state.edit_text! params[:todo].title
   end
 
   def finish_editing
-    #self.editing = false
     state.editing! false
-    #new_value = self.edit_text.strip
     new_value = state.edit_text.strip
     if new_value.empty?
       params[:todo].destroy
@@ -194,31 +186,21 @@ class TodoItem
   end
 
   def render
-    #li(class_name: {editing: self.editing}) do
     li(class_name: {editing: state.editing}) do
       div(class_name: 'view') do
-        #alert("TodoItem Update before : #{params[:todo].completed}")
         input(class_name: "toggle", type: "checkbox", checked: params[:todo].completed).on(:click) do
-          #alert("TodoItem Update after pre-update: #{params[:todo].completed}")
           todo = params[:todo]
           todo.update(:completed => !todo.completed)
-          #alert("TodoItem Update after updated : #{params[:todo].completed}")
         end
         
-        #label { self.edit_text }.on(:double_click) do
         label { state.edit_text }.on(:double_click) do
           # set on state will trigger re-render, so we manipulate the DOM after render done
-          #self.set_state(editing: true) do
-            #self.refs[:input].dom_node.focus
-          #end
           state.editing! true
-          #self.edit_text! params[:todo].title
           state.edit_text! params[:todo].title
         end if ! state.editing
 
         button(class_name: "destroy").on(:click) { params[:todo].destroy }
       end
-      #input(class_name: "edit", value: self.edit_text, autoFocus: true, ref: :input)
       input(class_name: "edit", value: state.edit_text, autoFocus: true, ref: :input)
       .on(:blur) { finish_editing }
       .on(:change) {|e| state.edit_text! e.target.value }
@@ -236,7 +218,6 @@ class TodoList
   
   def toggle_all
     distinct_status = Todo.all.map {|t| t.completed }.uniq
-    #alert("toggle_all:#{distinct_status}") 
     if distinct_status.count == 1
       Todo.all.each {|t| t.update(:completed => !distinct_status[0]) }
     else # toggle all as completed
@@ -249,12 +230,8 @@ class TodoList
       input(id: "toggle-all", type: "checkbox").on(:click) { toggle_all }
       label(htmlFor: "toggle-all") { "Mark all as complete" }
       ul(id: "todo-list") do
-        #alert("Todo-List:#{todos}")
         params[:todos].map do |todo|
-          #alert("TodoList ul : #{todo.completed}")
-          #present TodoItem, todo: todo , key: todo.id
           present TodoItem, todo: todo , key: todo.id, complete_check: todo.completed
-          #present TodoItem, todo: todo , key: todo.id
         end
       end
     end
@@ -276,7 +253,7 @@ class TodoAppView
 
   before_mount do
     Todo.on(:create)  { Todo.adapter.sync_models(Todo); reload_current_filter }
-    Todo.on(:update)  { Todo.adapter.sync_models(Todo); reload_current_filter } #alert "TodoAppView Update : #{Todo.all.map{|e| e.completed}}";
+    Todo.on(:update)  { Todo.adapter.sync_models(Todo); reload_current_filter }
     Todo.on(:destroy) { Todo.adapter.sync_models(Todo); reload_current_filter }
   end
 
@@ -292,13 +269,10 @@ class TodoAppView
     Todo.adapter.find_all(Todo) do |models|
       case filter
       when "all"
-        #self.todos = models.map{|e| e}
         state.todos!  models.map{|e| e}
       when "active"
-        #self.todos = models.reject(&:completed)
         state.todos!  models.reject(&:completed)
       when "completed"
-        #self.todos = models.select(&:completed)
         state.todos!  models.select(&:completed)
       end
     end
@@ -318,9 +292,7 @@ class TodoAppView
         h1 { "Todos" }
         input(id: "new-todo", placeholder: "What needs to be done?").on(:key_down) { |e| handle_keydown(e) }
       end
-      #present TodoList, todos: self.todos
       present TodoList, todos: state.todos
-      #alert("TodoAppView render : #{self.todos.map{|e| e.completed}}")
       present Footer, selected_filter: params[:filter]
     end
   end
